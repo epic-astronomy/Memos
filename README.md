@@ -8,3 +8,4 @@ EPIC Memo Series
 4. [1D Omniscope/EPIC Hybrid](PDFs/004_OmniEPIC.pdf) - An exploration of an Omniscope/EPIC framework. Includes math theory, description of algorithm to fit a grid to an array, and a few examples. Main punchline is that it's not as efficient as hoped.
 5. [Cross-Correlator Module / Romein bug fix](PDFs/005_EPIC_xCorr.pdf) - Briefly describes the xCorr module and explains a bug-fix to enable illumination pattern > 1 in romein gridding
 6. [FRB Detectability with EPIC](PDFs/006_Sensitivity_Dispersion_curves.pdf) - Describes the projected dispersive delay and pulse broadening for FRBs at LWA frequencies. We also have a sensitivity curve for integrations at EPIC timescales
+7. [EPIC Data Assessment](PDFs/007_EPIC_Data_Assessment.pdf) - Describes the issues dealt with while processing EPIC images offline to produce dynamic spectra or light curves for sources
