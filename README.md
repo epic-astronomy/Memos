@@ -9,3 +9,4 @@ EPIC Memo Series
 5. [Cross-Correlator Module / Romein bug fix](PDFs/005_EPIC_xCorr.pdf) - Briefly describes the xCorr module and explains a bug-fix to enable illumination pattern > 1 in romein gridding
 6. [FRB Detectability with EPIC](PDFs/006_Sensitivity_Dispersion_curves.pdf) - Describes the projected dispersive delay and pulse broadening for FRBs at LWA frequencies. We also have a sensitivity curve for integrations at EPIC timescales
 7. [EPIC Data Assessment](PDFs/007_EPIC_Data_Assessment.pdf) - Describes the issues dealt with while processing EPIC images offline to produce dynamic spectra or light curves for sources
+8. [EPIC vs Beam : Data Comparison](PDFs/008_EPICvsBeam_Data_Comparison.pdf) - Describes our understanding of the differences between EPIC and beam-formed data taken simultaneously. Steps to address these is also mentioned.
