@@ -2,26 +2,51 @@
 
 <p  style="text-align:center; font-size: 2em">ARIZONA STATE UNIVERSITY<br>TEMPE, ARIZONA 85287</p>
 <p  style="text-align:center; font-size: 1.5em">EPIC Code Optimizations-Part I</p>
-<p  style="text-align:center; font-size: 1.5em">Karthik<br>Jan 2, 2023</p>
+<p  style="text-align:center; font-size: 1.5em">Karthik<br>Feb 4
+, 2023</p>
 
 ## Introduction
 
-EPIC sky-imager's first iteration is a python-based program powered by the Bifrost framework. Each payload passes through a series blocks in a pipeline that transform the data using CPU-based and/or GPU-based operations. These blocks communicate using ring-buffers, which implement a locking mechanism for appropriate storage and retrieval by multiple producers and receivers. 
+EPIC sky-imager's first iteration is a python-based program powered by the Bifrost framework. Each payload passes through a series blocks in a pipeline that transform the data using CPU-based and/or GPU-based operations. These blocks communicate using ring-buffers, which implement a locking mechanism for appropriate storage and retrieval by these blocks. 
 
 The GPU part of the pipeline mainly focuses on applying the EPIC algorithm to gulps (or a series of packet sequences) of FEngine data to produce images. The relevant operations are carried out in the `MOFFCorrelatorOp` block. Optionally, GPUs can also be used in averaging the channels before imaging them in the `DecimationOp` block.
 
  The CPU part of the pipeline performs the following tasks using independent blocks or operators:
-- `FEngineCaptureOp`: Receive packets, sort and store them in a time-major layout (data dimensions: `time, chan, ant, pol, real_imag`).
 - `DecimationOp`: Decimate the channels if need be (or average them on a GPU).
 - `SaveImageOp`: Post-process the image for further storage.
 
-On RTX 2080 Ti, the first iteration of the code can generate sky-images of size 64x64 (~1.8 deg resolution) with up to 90 channels (covering 2.25 MHz) for a single polarization without any significant packet loss. Alternatively, it has also been shown to produce images of size 96x96 (~1.4 deg resolution) for 22 channels (covering 3.3 MHz) for a single polarization. Although the current code can successfully produce sky images, the primary beam is undersampled, which limits the imaging frequencies to less than ~45 MHz. Furthermore, the images only cover a subset of the full bandwidth and only with a single polarization, which may reduce the detectability of any radio transients.
 
-The main intent of this work is to be able to produce sky-images covering the full bandwidth and both the polarizations. Below I will describe the profiling results and metrics of the current GPU code, and I will discuss the new optimizations that allow us to obtain full bandwidth and full polarization images.
-
+The main intent of this work is to be able to produce sky-images covering the full bandwidth and all the polarizations. Below I will describe the profiling results and metrics of the current GPU blocks, and I will discuss the new optimizations that allow us to obtain full bandwidth and full polarization images. 
 
 ## GPU Profiling
-### Profiling preparation
+Optimizing GPU kernels require a proper identification of the associated bottlenecks through profiling. Below I provide a brief introduction to the concepts used in GPU programming, which aid in interpreting the bottlenecks, followed by GPU profiling results of the EPIC code.
+
+### CUDA Primer
+EPIC instances rely on NVIDIA GPUs (A4500 at the time of writing this memo) for parallel processing. Programs use the C/C++ interface provided by the Compute Unified Device Architecture (CUDA) programming model to parallelize scalar programs. Its compiler provides all the necessary abstractions to leverage massive parallelism built into the CUDA programming model. CUDA provides a thread and memory hierarchy to simplify GPU programming. Its thread hierarchy can be described as follows:
+* __Blocks__: A collection of threads with 3D-indexing support. Each thread executes the same kernel and each block can have up to 1024 active threads at a time.
+* __Grid__: A collection of blocks with 3D-indexing support (see Figure 1). Each grid can be launched with up to 2^31-1 blocks, however, the maximum number of active blocks in the grid depends on multiple variable, for instance, the type of GPU, available memory, among others.
+* __Warps__: A collection of 32 threads with consecutive indices bundled together and executed on a single CUDA core. The warp dimension is independent of the block and grid sizes. The cores are grouped together to form a streaming multiprocessor (SM).
+* __Cooperative Groups__: In addition to the above-mentioned collectives, CUDA also offers a collective for selective grouping of threads known as cooperative groups. Here a group can be a collection of threads within a block or a collection of blocks within a grid (requires devices with compute capability of 9.0, or greater). For instance, to perform convolutional antenna gridding, threads within a block can be grouped into "tiles" and each tile can compute all the grid elements of a single antenna in parallel (see section 4.3).
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/4162508/214206097-b8887ecf-6c04-4b69-b0e1-cb821ff84cd7.png" />
+
+  __Figure 1__: Grids, Blocks and Multiprocessors. A block is a collection of threads and a grid is a collection of blocks with 3D indices. Threads with consecutive indices are bundled together into warps of 32 threads and are excecuted on individual CUDA cores. NVIDIA GPUs consist of SMs each with several CUDA cores.
+</p>
+CUDA programming model also provides a memory hierarchy accessible to the threads (see Figure 2). Each thread has private local memory (registers) and each thread block has a shared memory accessible by all its threads, which can be used as a scratchpad  or L1 memory. Blocks can also access each other's shared memory in devices with compute capability 9.0. All threads can access the global memory through the L2 cache. The shared memory size is extremely limited and 
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/4162508/214466324-8788cb76-033e-4c98-b803-ff146d053d1a.png" />
+
+  __Figure 2__: CUDA memory hierarchy with example memory sizes for NVIDIA A100.
+</p>
+
+
+In addition, there exists read-only memory accessible to all the threads, namely, constant and texture memory. These memory spaces are optimzied for different memory access types. For example, the texture memory space is optimized for spatially correlated access patterns that can be useful in gridding convolution.
+
+Bottlenecks exist in GPU codes either due to inefficient memory accesses (bandwidth-bound) or due to GPU's inadequate computation power (compute-bound). Below I describe profiling results of the EPIC's GPU code that can be interpreted using the above described characteristics, and I will detail the optimizations are made to make the kernels compute-bound.
+
+### Profiling
 I used [NVIDIA Nsight Systems](https://developer.nvidia.com/nsight-systems) to measure the overall performance (or system-level profiling), and [NVIDIA Nsight Compute](https://developer.nvidia.com/nsight-compute) to measure the kernel metrics. See [Pearson (2020)](https://www.carlpearson.net/pdf/20200416_nsight.pdf) for an overview on these tools. For both tools, I ran EPIC with the following options to profile the `MoFFCorrelatorOp` block with a total runtime of 50 s:
 - Gulp size 40 ms (or `--nts 1000`)
 - Single polarization
@@ -101,34 +126,98 @@ This kernel is responsible for producing the cross-multiplied products (XX, YY, 
 **Figure 4b:** Same as Fig 2b but for `XGrid` 
 
 ## Discussion
-The profiling results clearly indicate that all the kernels used in the correlator block are bandwidth bound. It is primarily due to each kernel making large stores and/or fetches from the global memory: 
-1. VGrid makes large stores to the global memory. For instance, write-size for an 64x64 image with a gulp size of 1000 sequences, each with 90 channels and a single polarization is ~2 GiB. 
-2. The FFT kernel although performs above the double precision roofline, it must fetch the gridded data and store the iFFTed data to the global memory.
+The profiling results clearly indicate that all the kernels used in the correlator block are bandwidth bound. It is primarily due to each kernel using the global memory as their workspace: 
+1. VGrid requires large write sizes to the global memory. For instance, the write-size for a 64x64 image with a gulp size of 1000 sequences each with 90 channels and a single polarization is ~2 GiB. 
+2. The FFT kernel although performs above the double precision roofline, it must fetch the gridded data and write iFFTed data back to the global memory.  
 3. The XGrid kernel must again fetch the iFFTed data from the global memory to derive cross multiplication products and write them back to the global memory.
 
-Furthermore, for each accumulation, initializing the gridded and cross multiplied data regions consumes ~19% of the total accumulation time. These bottlenecks can be eliminated by coalescing these kernels and performing computations using on-chip memory (registers and shared memory). 
+Furthermore, for each accumulation, initializing the gridded and cross multiplied data blocks consumes ~19% of the total accumulation time. These bottlenecks can be eliminated by coalescing these kernels and performing computations using on-chip memory (registers and shared memory), which is about ten times faster than the global memory.
 
-A new package called [cuFFTDx](https://docs.nvidia.com/cuda/cufftdx/index.html) allows us to perform FFT operations completely using registers and shared memory. Let us consider the memory requirements for a 64x64 image. At complex double precision each image occupies 64 KiB. That means we will only be able to run a single block per SM and two with single precision. This leads to <50% warp occupancy thereby increasing the overall runtime. However, with half (16 bit) precision, we can fit two 64x64 images in a 32 KiB shared memory block. This permits us to image a single image with both polarizations within the same block. On RTX 2080 Ti, it takes about ~13 ms to perform iFFT on a 1000-sequence glup with 132 channels for both the polarizations, which is similar to the time taken to iFFT an identical gulp but with only 90 channels and a single polarization. Below I describe how the VGrid and XGrid kernels can be combined with cuFFTDx to perform gridding and cross multiplication using on-chip memory.
+A new package called [cuFFTDx](https://docs.nvidia.com/cuda/cufftdx/index.html), which is distributed with MathDx, allows us to perform FFT operations completely using registers and shared memory. Although using on-chip memory eliminates the need to perform computations using global memory, on-chip memory is highly limited (e.g., ~100 KiB per SM in A4500) thereby limiting the size of ouptut images. For instance, a 64x64 image with complex double precision occupies 64 KiB. That means only a single block can be run per SM that leads to <50% warp occupancy thereby increasing the overall runtime. However, with half (16 bit) precision, we can fit two 64x64 images in a 32 KiB shared memory block. This permits us to generate a single image with both polarizations within the same block. On RTX 2080 Ti, it takes about ~13 ms to perform iFFT on a 1000-sequence glup with 132 (3.3 MHz) channels for both the polarizations, which is similar to the time taken to iFFT an identical gulp but with only 90 channels and a single polarization. Below I describe how the VGrid and XGrid kernels can be combined with cuFFTDx to perform gridding and iFFT followed by cross multiplication within a unified kernel completely using on-chip memory.
 
-### Gridding
-The previous [optimization](https://github.com/epic-astronomy/Memos/blob/master/PDFs/003_Romein_Optimization.pdf) to the gridding involved processing each antenna on a separate thread and storing the gridded data back to the shared memory. The code used a support size of a single grid cell (or a pill box). However, cuFFTDx has strict requirements for the block dimenions, which may not always equal the number of antennas. Hence, in the new code, the threads are divided into _tiles_ (or groups) of `supportxsupport` using the `cooperative_groups` functionality provided by the CUDA programming model. Each tile computes all the grid values of a single antenna and atomically adds to the grid in the shared memory. The Gridding Convolution Function (GCF) is a zero-order prolate spheroid, and is stored as a texture and the factors are fetched using appropriate grid coordinates. Because the distances between antennas and grid coordinates are most likely to take non-integral values, the values are fetched using normalized coordinates. This gridding mode avoids storing data back into the global memory and facilitates antenna-polarization dependent GCFs.
 
 ### FFT
-The gridded data is transferred from shared memory into thread registers for computation by cuFFTDx. Because cuFFTDx only supports 1D FFTs, the iFFT is preformed row-wise and then column-wise with appropriate normalizations to avoid values oveflowing the half precision. 
+Although gridding is performed before FFT, using cuFFTDx constrains the performance of gridding and cross multtiplication. Hence, I will describe the FFT part of the unified-kernel before discussing the former two.
+
+The current version (v1.1.0) of cuFFTDx only supports 1D fourier transform. Hence, 2D iFFT is performed by computing row-wise iFFT followed by column-wise iFFT. cuFFTDx reads input data from thread registers and uses shared memory as a workspace to compute FFT. The output is stored back again to the registers. It is mainly configured using four parameters:
+* FFT size (Size of FFT along one dimension)
+* Precision
+* Registers per thread (Number of FFT elements that will be computed in each thread)
+* FFTs per block (Number of `FFT size` FFTs per block)
+
+To perform iFFT on a single square image, we must set `FFT size` and `FFTs per block` each to the side of the image. The number of registers per thread, which must be a power of 2, and precision can be varied to find the optimal set of parameters. These four parameters determine the block size and the shared memory required for the FFT operation. For example, to iFFT a 64x64 image with 32-bit precision, we must set `FFT size` and `FFTs per block` to 64. If each thread computes 8 FFT elements, the kernel block must be lauched with dimensions of `(8, 64, 1)` and a shared memory of 64 KiB, as shown schematically in Figure 5.
+
+![fft_block_scheme](https://user-images.githubusercontent.com/4162508/216741704-3ad440ee-0b86-4ef8-9d6e-0af50d081dfa.jpg)
+**Figure 5:** Distribution of FFT elements in a 2D thread block for a 64x64 image with 8 elements per thread. Each number inside a thread indicates the pixel index within the row. Each element is a complex number for single and double precisions while it is a set of two complex numbers for half-precision arranged in RRII layout. Each row computes all the FFT elements for the corresponding row in the output image. In case of half-precision, the FFT elements of both the images are computed simultaneously.
+
+With a 64 KiB shared memory requirement, only one block can be run per SM, which reduces the GPU throughput. Although the memory size for FFT can be reduced by increasing the number of thread registers, we will still require 64 KiB to transpose the image for column-wise FFT. Hence, the unified kernel must be able to fit an entire image within the shared memory. Furthermore, because each block can only image one polarization, global memory is required to store and fetch images to generate cross polarization products, which introduces additional latency. These two problems can be addressed by using half-precision (16-bit float) where each block can accomodate two images in 32 KiB shared memory and images with all the four polarizations can be generated using on-chip memory. 
+
+The memory layout for half precision differs from 32-bit and 64-bit precisions. While each register holds one complex number in the latter two, two complex numbers are batched together into a single register with the former in an RRII layout. That means we can use the same set of registers to hold two images at a time. This allows us to compute iFFT and generate cross polarization products completely using on-chip memory.
+
+
+### Gridding  
+Previous [optimization](https://github.com/epic-astronomy/Memos/blob/master/PDFs/003_Romein_Optimization.pdf) to the gridding involved processing each antenna on a separate thread (block size=256) and atomically adding the gridded data back to the global memory with the support size of a single grid cell (or a pill box). However, the block dimenions, which are determined by cuFFTDx, may not always equal the number of antennas. Hence, in the unified kernel, the threads are divided into _tiles_ (or groups) of size `support x support` using the `cooperative_groups` (CG) functionality provided by CUDA. With CG, the tile size is restricted to powers of 2. Each tile computes all the grid values of a single antenna and atomically adds to the grid stored in the shared memory. CG provides functionality to determine the 1D index (or rank) of each thread within the tile group. We can convert this index into a 2D position on a local grid relative to the antenna that can then be used to determine its nearest grid point on the UV plane (see Figure 6). The following pseudo-kernel demonstrates this algorithm.
+```c++
+for(ant=tile_rank,ant<N,ant+=ntiles){
+  antx = antenna_pos[ant].x
+  anty = antenna_pos[ant].y
+  //Determine antenna's local grid point 
+  //In each tile, thread_rank goes from 0...T-1 where T=support*support
+  v = int(thread_rank/support) - support * 0.5 + 0.5
+  u = thread_rank  - int(thread_rank/support)*support - support * 0.5 + 0.5
+
+  //Check if the grid point falls inside the UV grid after translating it to the antenna's position
+
+  //If yes
+  //calculate antenna's offset from the UV grid point
+  dx = abs(int(antx + u) + 0.5 - antx)
+  dy = abs(int(anty + v) + 0.5 - anty)
+  
+  //fetch the scaling factor using normalized coordinates
+  scale = texture_2D(gcf_kernel, dx/(0.5 * support), dy/(0.5 * support))
+
+  //use the scaling factor and atomically add the appropriate voltage 
+  //to the UV grid
+  //The corresponding grid coordinate's data index is given by
+  U=int(antx + u)
+  V=int(anty + V)
+}
+```
+![gridding](https://user-images.githubusercontent.com/4162508/216746331-03467423-d2ba-420b-bae1-5e2a4c8ab0ef.jpg)
+**Figure 6:** Gridding examples with a support size of 4 cells. In the new gridding approach, each cell in the antenna's kernel is assigned a thread from the tile group. These threads make atomic updates to the grid in the shared memory. The left panel shows the gridding work distribution when the antenna location falls in between the UV grid points (blue-dots). In this case, each thread computes the grid value closest to its cell's center. For example, thread 0 computes the grid value for (1,0). The right panel shows the gridding work distribution when the antenna location falls on the UV grid points. In this case, because multiple grid points fall on the boundary of each cell, only the grid point closest to the bottom-left corner of each cell is considered. No update is made for grid points falling on the boundary of the kernels (grey dots).
+
+ The Gridding Convolution Function (GCF) is identical for all the antennas and is a zero-order prolate spheroid, stored as a 2D texture. Because the kernel is symmetric about the origin, the texture only contains the first quadrant of the kernel. In the unifed kernel, the kernel resolution is set to 32 elements or the GCF is pre-computed on a 32x32 grid. NVIDIA GPUs have specialied hardware to fetch textures at non-integral indices. This allows us to determine the scaling factor for each grid point located at arbitrary distances from the antenna. Finally, the 2D texture can be extended along the third dimension to include antenna-polarization dependent GCFs.
+
 
 ### Cross Multiplications
-With half precision, each register stores two complex values (in a RRII layout), which is exploited to store a pixel value for both polarizations in a single register. Due to this layout, the cross multiplication products (XX, YY, XY*, YX*) for each pixel can be derived within a single thread without requiring any global memory reads. To avoid atomic writes to the global memory, each channel is imaged in its own dedicated block. This will also eliminate the need to initialize the output memory block to 0 because the first write to the memory will be assignment and the rest will be in-place additions.
+Due to the RRII layout provided by half-precision in each register, the cross multiplication products (XX, YY, XY*, YX*) for each pixel can be derived within a single thread without requiring any global memory reads. To avoid atomic writes to the global memory, each channel is imaged in its own dedicated block. This will also eliminate the need to initialize the output memory block to 0 because the first write to the memory will be assignment and the rest will be in-place additions.
 
-With these optimizations, on `NVIDIA A4500`, it takes ~30 ms to generate a 64x64 sky-image with 112 (2.8 MHz) channels and both polarizations although with a support size of only 2 cells. Moreover, the total memory requirement including constant and texture memory is less than 200 MiB. The bandwidth is limited because of the shared memory constraint of 32 KiB per block that allows only 112 simultaneous active blocks (2 blocks per SM) on the GPU. Any GPU with an SM count>66 (e.g., RTX 2080 Ti) would allow us to generate images with the full bandwidth of 3.3 MHz.
+## Current State and Way Forward
+With the unified-kernel, on `NVIDIA A4500`, which has 56 SMs, it takes ~30 ms to generate a 64x64 sky-image with 112 (2.8 MHz) channels and both polarizations although with a support size of only 2 cells. Moreover, the total memory requirement including constant and texture memory is less than 200 MiB. The bandwidth is limited because of the shared memory constraint of 32 KiB per block that allows only 112 simultaneous active blocks (2 blocks per SM) on the GPU. Any GPU with an SM count>66 (e.g., RTX 2080 Ti; see also table 1) would allow us to generate images with the full bandwidth of 3.3 MHz.
 
-
-## Future Improvements
-* The image size is limited to 64x64 due to shared memory constraints. Although a single 128x128 image can fit in the shared memory, it will restrict the maximum active blocks per SM to one. Because the FFT is performed row-wise followed by column-wise, the FFT can be split to multiple blocks where each block performs row-wise FFT first and acquires column-wise data from adjacent blocks.  This inter-block communication can be achieved in two ways:
-
-    1. Map a global memory block into the L2 cache and use it as a workspace for inter-block memory transfers.
-    2. Use clusters of blocks with distributed shared memory. This does not require any global memory accesss, however, requires GPUs with compute capability of at least 9.0.
+The image size is also limited to 64x64 due to shared memory constraints. Although a single 128x128 image can fit in the shared memory, it will restrict the maximum active blocks per SM to one. Because the FFT is performed row-wise followed by column-wise, the FFT can be split to multiple blocks where each block performs row-wise FFT first and acquires column-wise data from adjacent blocks.  This inter-block communication can be achieved using clusters of blocks with distributed shared memory. Although this method removes global memory accesss, it requires GPUs with compute capability of at least 9.0. At the time of writing this memo, `H100` is the only GPU with this capability. Alternatively, two GPUs can be run in parallel, one for each polarization to produce 128x128 images at near full bandwidth. Below I provide a list of potential GPUs capable of powering EPIC imagers at LWA, Sevilleta.
 
 
+**Table 1:** List of potential GPUs for EPIC imagers
+|GPU|SM count | Shared Memory per SM (KiB)|Image size|Achievable bandwidth (Channels/MHz)|Polarization|Estimated price
+|--|:--:|:--:|:--:|:--:|:--:|:--:|
+RTX 2080 Ti| 68 | 64 | 64x64<br>128x128 | 132/3.3 MHz<br>68/1.65 MHz| Dual<br>Single| $1k
+RTX A4500| 56 | 128 | 64x64<br>128x128 | 112/2.8 MHz<br>56/1.4 MHz|Dual<br>Single | $1.5k
+RTX 3090 Ti | 84 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>84/2.1 MHz|Dual<br>Single | $1.6k
+RTX 4090 | 128 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>128/3.2 MHz| Dual<br>Single | $1.8k
+A100 | 108 | 192| 64x64<br>128x128 | 132/3.3 MHz<br>108/2.7 MHz| Dual<br>Dual | $11k
+H100 | 114 | 256 | 64x64<br>128x128 | 132/3.3 MHz<br>114*/2.85 MHz| Dual<br>Dual | $35k
+
+\* Due to support for distributed shared memoy, it may be possible to acheive full bandwidth by splitting the FFTs among multiple blocks.
 
 
 
+
+
+
+
+
+# References
+- [Carl Pearson 2020, Using Nsight Compute and Nsight Systems](https://www.carlpearson.net/pdf/20200416_nsight.pdf)
+- [NVIDIA Nsight Systems User Guide](https://docs.nvidia.com/nsight-systems/pdf/UserGuide.pdf)
+- [Akshay Subrahmaniam 2021, WHAT THE PROFILER IS TELLING YOU: OPTIMIZING GPU KERNELS](https://ericdarve.github.io/cme213-spring-2021/Lecture%20Slides/CME213_2021_CUDA_Profiling.pdf)
