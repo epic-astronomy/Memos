@@ -155,7 +155,7 @@ With a 64 KiB shared memory requirement, only one block can be run per SM (on de
 
 The memory layout for half precision differs from 32-bit and 64-bit precisions. While each register holds one complex number in the latter two, two complex numbers are batched together into a single register with the former in an RRII layout. That means we can use the same set of registers to hold two images at a time. This allows us to compute iFFT and generate cross polarization products in a single operation.
 
-Using half-precision alleviates the shared-memory requirements, however, it introduces problems of floating point over or underflows. The voltage data although arrives as unsigned 4-bit complex numbers, gridding can produce values upto a few tens and inverse FFT can result in pixel values overflowing 65504, which is the largest representable magnitude in half-precision. Hence, the values are normalized by the image size (N) after the row-wise iFFT to prevent this overflow. The normalization factor is only $\frac{1}{N}$ as opposed to the conventionally used factor of $\frac{1}{N^2}$ to prevent underflow. For example, $\frac{1}{N^2}\approx 2.4 * 10^{-4}$ for a 64x64 image, which is close $\approx 6.4 * 10^{-5}$, the smallest magnitude representable in half-precision. That means any normalization with $\frac{1}{N^2}$ on values less than $\approx$ 0.24 would reult in an underflow.  
+Using half-precision alleviates the shared-memory requirements, however, it introduces problems of floating point over or underflows. The voltage data although arrives as unsigned 4-bit complex numbers, gridding can produce values upto a few tens in each pixel and inverse FFT can result values overflowing 65504, which is the largest representable magnitude in half-precision. Hence, the values are normalized by the image size (N) after the row-wise iFFT to prevent this overflow. The normalization factor is only $\frac{1}{N}$ as opposed to the conventionally used factor of $\frac{1}{N^2}$ to prevent underflow. For example, $\frac{1}{N^2}\approx 2.4 * 10^{-4}$ for $N=64$, which is close $\approx 6.4 * 10^{-5}$, the smallest magnitude representable in half-precision. That means any normalization with $\frac{1}{N^2}$ on values less than $\approx$ 0.24 would reult in an underflow.  
 
 ### Gridding  
 Previous [optimization](https://github.com/epic-astronomy/Memos/blob/master/PDFs/003_Romein_Optimization.pdf) to the gridding involved processing each antenna on a separate thread (block size=256) and atomically adding the gridded data back to the global memory with the support size of a single grid cell (pill box gridder). However, the block dimenions, which are determined by cuFFTDx, may not always equal the number of antennas. Hence, in the unified kernel, the threads are divided into _tiles_ (or groups) of size `support x support` using the `cooperative_groups` (CG) functionality provided by CUDA. With CG, the tile size is restricted to powers of 2. Each tile computes all the grid values of a single antenna and atomically adds to the grid that is initially stored in the shared memory and then tranfered to the thread registers. CG provides functionality to determine the 1D index (or rank) of each thread within the tile group. We can convert this index into a 2D position on a local grid relative to the antenna that can then be used to determine its nearest grid point on the UV plane (see Figure 8). The following pseudo-kernel demonstrates this algorithm.
@@ -208,6 +208,8 @@ RTX A4500| 56 | 128 | 64x64<br>128x128 | 112/2.8 MHz<br>56/1.4 MHz|Dual<br>Singl
 RTX 3090 Ti | 84 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>84/2.1 MHz|Dual<br>Single | 1560 [1860]|8.6|PCIe 4.0 x16|$1.6k
 RTX 4090 | 128 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>128/3.2 MHz| Dual<br>Single | 2235 [2520]|8.9|PCIe 4.0 x16|$1.8k
 RTX 4090 Ti | 142 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>132/3.3 MHz| Dual<br>Single | 2235 [2520]|8.9|PCIe 4.0 x16|$2k<sup>#</sup>
+|||||Data Center GPUs|
+L40 |142 | 128|64x64<br>128x128|132/3.3 MHz<br>132/3.3 MHz|Dual<br>Single|735<br>[2490]|8.9|PCIe 4.0 x16|$7.6k
 A100 PCIe 40 GB| 108 | 192| 64x64<br>128x128 | 132/3.3 MHz<br>108/2.7 MHz| Dual<br>Dual |765 [1410] |8.0|PCIe 4.0 x16|$11k
 H100 PCIe | 114 | 256 | 64x64<br>128x128 | 132/3.3 MHz<br>114*/2.85 MHz| Dual<br>Dual | 1095 [1795]|9.0|PCIe 5.0 x16|$35k
 
@@ -217,14 +219,9 @@ H100 PCIe | 114 | 256 | 64x64<br>128x128 | 132/3.3 MHz<br>114*/2.85 MHz| Dual<br
 
 \* Due to support for distributed shared memoy, it may be possible to acheive full bandwidth by splitting the FFTs among multiple blocks.
 
-
-
-
-
-
-
-
 # References
 - [Carl Pearson 2020, Using Nsight Compute and Nsight Systems](https://www.carlpearson.net/pdf/20200416_nsight.pdf)
 - [NVIDIA Nsight Systems User Guide](https://docs.nvidia.com/nsight-systems/pdf/UserGuide.pdf)
 - [Akshay Subrahmaniam 2021, WHAT THE PROFILER IS TELLING YOU: OPTIMIZING GPU KERNELS](https://ericdarve.github.io/cme213-spring-2021/Lecture%20Slides/CME213_2021_CUDA_Profiling.pdf)
+
+
