@@ -18,20 +18,13 @@ In addition to temporarily storing individual images in a disk-based buffer, the
 The EPIC [post-processing system](https://github.com/epic-astronomy/epic-stream-processor) extracts the pixels for each image and formats the data for ingestion into the database. The initial version used Unix Domain Sockets (UDS) for fetching data from the imager. Figure 1 shows the sequence of operations in this system. The imager transfers each image is to the post-processor through UDS. The processed pixel data is then transferred to the database through UDS. In addition, the imager also optionally saves the images to the disk.
 ```mermaid
 sequenceDiagram
-%%Imager->>Disk: 160 ms Accumulated Images (650 MB/s)
-%%par
    Imager->>+Unix Domain Socket: 80 ms Images (1.25 GB/s)
    Unix Domain Socket->>-Post Processor: Images
-   %%end
-   alt Zero-copy
-   Imager-)Post Processor: 80 ms Images 
-    end
+
    Post Processor->>+Unix Domain Socket: Pixel Data (3.5 MB/s)
    Unix Domain Socket->>-PgDB: Pixel Data (1 mil rows/s)
-      Imager->>Disk: 80 ms Images (1.25 GB/s)
-      alt Storage
-   Post Processor-)Disk: 160 ms Accum. Images (650 MB/s)
-   end
+      Imager->>Disk: [Optional] 80 ms Images (1.25 GB/s)
+
 ```
 **Figure 1.** Sequence diagram for the Post processing system
 
