@@ -10,3 +10,5 @@ EPIC Memo Series
 6. [FRB Detectability with EPIC](PDFs/006_Sensitivity_Dispersion_curves.pdf) - Describes the projected dispersive delay and pulse broadening for FRBs at LWA frequencies. We also have a sensitivity curve for integrations at EPIC timescales
 7. [EPIC Data Assessment](PDFs/007_EPIC_Data_Assessment.pdf) - Describes the issues dealt with while processing EPIC images offline to produce dynamic spectra or light curves for sources
 8. [EPIC vs Beam : Data Comparison](PDFs/008_EPICvsBeam_Data_Comparison.pdf) - Describes our understanding of the differences between EPIC and beam-formed data taken simultaneously. Steps to address these is also mentioned.
+9. [EPIC Code Optimizations](PDFs/009_EPIC_Code_Optimizations.md) - Describes profiling of GPU code and various optimizations that lead to high bandwidth and full polarization capability.
+10. [EPIC Imager Data Management](PDFs/010_EPIC_Imager_Data_Management.md) - Summarizes data rates and storage requirements, and describes schemes for data transfer between imager and post-processing systems.
