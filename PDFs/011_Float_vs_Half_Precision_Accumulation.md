@@ -52,12 +52,14 @@ The table below shows the results for images drawn with $\sigma^2=[1,3,5]$. The 
  Figure 3 shows the kernel density estimate (KDE) plots of pixel values for each chosen $\sigma^2$. Half precision values are mostly underrepresented in magnitude compared to their float counterparts. This feature remains constant across a wide range of values with the means varing from 2000 to 50000.
 
  ![](https://github.com/epic-astronomy/Memos/assets/4162508/21c26a8e-83d3-47b4-acff-32d470b63b82)
+
  **Figure 3:** Kernel Density Estimate (KDE) plots for pixels values at half and float precisions, drawn from normal distributions.
 
  Figure 4 shows KDE plots of the ratio of pixels values at half and float precisions. As indicated in table 1, nearly all the values are within 1% of each other. Interestngly, the KDE for pixel values drawn using $\sigma^2=1$ appears different from those drawn using $\sigma^2=3,5$. It is due to the smaller uncertainty between half and float precisions in represnting values close to 0 (see figure 2).
 
 
  ![](https://github.com/epic-astronomy/Memos/assets/4162508/2399b108-9cba-446b-8812-79ed4e779a78)
+
  **Figure 4:** KDE plot for the ratio of pixel values at half and float precisions $(\frac{hp}{fp})$, drawn from normal distributions. 
 
 The above experiment is repeated by replacing the normal distribution with a uniform distribution in the range $[-i, i]$ where $i=[1,2,4,8]$. The results are shown in the table below. Interestingly, unlike the values drawn from a normal distribution, uniformly distributed values show similar mean percentage errors across all ranges but no clear trend is observed in the maximum percetage error.
@@ -75,11 +77,13 @@ The above experiment is repeated by replacing the normal distribution with a uni
  Figure 5 shows the kernel density estimate (KDE) plots of pixel values for each chosen range. Similar to values drawn from a normal distribution, half precision values are mostly underrepresented in magnitude compared to their float counterparts. This feature remains constant across a wide range of values with the means varing from 2000 to 50000. Moreover, the mean error remains similar across all the chosen ranges. 
 
  ![](https://github.com/epic-astronomy/Memos/assets/4162508/09732be9-25a3-4d3b-80aa-55479ccbdf1f)
+
  **Figure 5:** KDE plots for pixels values at half and float precisions, drawn from uniform distributions.
 
 Figure 6 shows KDE plots of the ratio of pixels values at half and float precisions, drawn from uniform distributions. As indicated in table 2, nearly all the values are within 1% of each other. The mean error is about 0.4% $\pm$ 0.4%. 
 
 ![](https://github.com/epic-astronomy/Memos/assets/4162508/929e85a1-b604-45c1-a035-3b48fffad712)
+
 **Figure 6:** KDE plot for the ratio of pixel values at half and float precisions $(\frac{hp}{fp})$, drawn from uniform distributions.
 
 In conclusion, while the error in a pixel can reach up to $\sim2.3\%$, the absolute mean error is less than $1\%$ for values drawn using normal and uniform distributions. Hence, a conservative value on the error can be taken as 1.5%. The code used in this analysis is provided below.
