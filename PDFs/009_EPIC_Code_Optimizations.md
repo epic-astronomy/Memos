@@ -206,8 +206,8 @@ The image size is also limited to 64x64 due to shared memory constraints. Althou
 RTX 2080 Ti| 68 | 64 | 64x64<br>128x128 | 132/3.3 MHz<br>68/1.65 MHz| Dual<br>Single|1350 [1545]| 7.5|PCIe 3.0 x16 |$1k
 RTX A4500| 56 | 128 | 64x64<br>128x128 | 112/2.8 MHz<br>56/1.4 MHz|Dual<br>Single |1050 [1650]|8.6|PCIe 4.0 x16| $1.5k
 RTX 3090 Ti | 84 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>84/2.1 MHz|Dual<br>Single | 1560 [1860]|8.6|PCIe 4.0 x16|$1.6k
-RTX 4090 | 128 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>128/3.2 MHz| Dual<br>Single | 2235 [2520]|8.9|PCIe 4.0 x16|$1.8k
-RTX 4090 Ti | 142 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>132/3.3 MHz| Dual<br>Single | 2235 [2520]|8.9|PCIe 4.0 x16|$2k<sup>#</sup>
+RTX 4090 | 128 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>128/3.2 MHz| Dual<br>Dual | 2235 [2520]|8.9|PCIe 4.0 x16|$1.8k
+RTX 4090 Ti | 142 | 128 | 64x64<br>128x128 | 132/3.3 MHz<br>132/3.3 MHz| Dual<br>Dual | 2235 [2520]|8.9|PCIe 4.0 x16|$2k<sup>#</sup>
 |||||Data Center GPUs|
 L40 |142 | 128|64x64<br>128x128|132/3.3 MHz<br>132/3.3 MHz|Dual<br>Single|735<br>[2490]|8.9|PCIe 4.0 x16|$7.6k
 A100 PCIe 40 GB| 108 | 192| 64x64<br>128x128 | 132/3.3 MHz<br>108/2.7 MHz| Dual<br>Dual |765 [1410] |8.0|PCIe 4.0 x16|$11k
