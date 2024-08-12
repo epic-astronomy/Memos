@@ -1,6 +1,7 @@
 # Memos
 EPIC Memo Series
 
+
 ## List of memos
 1. [A Roadmap for Efficient Direct Imaging with Large Radio Interferometer Arrays (Astro2020 APC White Paper](PDFs/001_Astro2020_White_Paper.pdf) - White paper submitted to Decadal Survey outlining state of direct imaging and future directions.
 2. [Searching for Crab Giant Pulses with EPIC](PDFs/002_Searching_for_CGP.pdf) - First steps toward searching EPIC data for Crab Giant Pulses. Includes some sensitivity considerations and several examples of data artifacts.
@@ -14,3 +15,9 @@ EPIC Memo Series
 10. [EPIC Imager Data Management](PDFs/010_EPIC_Imager_Data_Management.md) - Summarizes data rates and storage requirements, and describes schemes for data transfer between imager and post-processing systems.
 11. [Float vs Half Precision Accumulation for EPIC Images](PDFs/011_Float_vs_Half_Precision_Accumulation.md) - Evaluates the uncertainies in pixel values when using half (16-bit) and float (32-bit) precision for image accumulations.
 12. [EPIC Imaging & Source Localization Comparisons](PDFs/012_EPIC_Imaging_and_Localization_Comp.pdf) - Performs direct image comparisons between EPIC system and "Off-the-shelf" imagers such as WSClean. Also describes and characterizes outstanding problems within the python EPIC deployment. 
+
+### Acknowledgements
+This material is based upon work supported by the National Science Foundation under Grant Number AST-2108115 (ATI).
+
+### Disclaimer
+Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.
