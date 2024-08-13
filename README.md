@@ -15,7 +15,7 @@ EPIC Memo Series
 10. [EPIC Imager Data Management](PDFs/010_EPIC_Imager_Data_Management.md) - Summarizes data rates and storage requirements, and describes schemes for data transfer between imager and post-processing systems.
 11. [Float vs Half Precision Accumulation for EPIC Images](PDFs/011_Float_vs_Half_Precision_Accumulation.md) - Evaluates the uncertainies in pixel values when using half (16-bit) and float (32-bit) precision for image accumulations.
 12. [EPIC Imaging & Source Localization Comparisons](PDFs/012_EPIC_Imaging_and_Localization_Comp.pdf) - Performs direct image comparisons between EPIC system and "Off-the-shelf" imagers such as WSClean. Also describes and characterizes outstanding problems within the python EPIC deployment. 
-
+13. [Searching for FRBs with EPIC](PDFs/013_searchForFRBS.pdf) - A first look at data recorded and dedispersed following CHIME-FRB alerts. No low-frequency FRBs were found.
 ### Acknowledgements
 This material is based upon work supported by the National Science Foundation under Grant Number AST-2108115 (ATI).
 
